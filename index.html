@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>📷 QR Scanner Nâng Cao</title>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <style>
+    :root {
+      --primary: #4caf50;
+      --background: #f8f9fa;
+      --text: #333;
+    }
+    body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: var(--background);
+      color: var(--text);
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      color: var(--primary);
+      font-size: 1.6em;
+    }
+    #reader {
+      width: 100%;
+      max-width: 340px;
+      margin: 20px auto;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      background: #fff;
+    }
+    #result {
+      margin-top: 20px;
+      padding: 15px;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      text-align: left;
+      max-width: 340px;
+      margin-left: auto;
+      margin-right: auto;
+      line-height: 1.5;
+    }
+    .type {
+      padding: 4px 8px;
+      background: var(--primary);
+      color: white;
+      border-radius: 5px;
+      display: inline-block;
+      font-size: 0.85em;
+      margin-bottom: 10px;
+    }
+    a {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>📱 Quét mã QR nâng cao</h1>
+  <p>Cho phép truy cập camera và đưa mã QR vào khung bên dưới 👇</p>
+
+  <div id="reader"></div>
+  <div id="result">⏳ Đang chờ quét mã...</div>
+
+  <script>
+    const reader = new Html5Qrcode("reader");
+
+    function detectType(content) {
+      if (content.startsWith("momo://") || content.includes("momo.vn"))
+        return "MoMo";
+      if (content.match(/9704\d{9,}/) || content.includes("vietqr") || content.includes("napas"))
+        return "VietQR / Ngân hàng";
+      if (content.startsWith("http"))
+        return "Liên kết web";
+      if (content.match(/^SP\d+/i))
+        return "Mã sản phẩm nội bộ";
+      return "Không xác định";
+    }
+
+    function onScanSuccess(decodedText) {
+      const type = detectType(decodedText);
+      let html = `<div class="type">${type}</div>`;
+      html += `<b>Nội dung quét được:</b><br>${decodedText}<br>`;
+
+      if (decodedText.startsWith("http"))
+        html += `<br><a href="${decodedText}" target="_blank">🔗 Mở liên kết</a>`;
+
+      // Hiển thị kết quả
+      document.getElementById("result").innerHTML = html;
+    }
+
+    reader.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: 250 },
+      onScanSuccess
+    ).catch(err => {
+      document.getElementById("result").innerHTML =
+        "❌ Không thể mở camera.<br>Hãy đảm bảo bạn truy cập qua HTTPS hoặc GitHub Pages.";
+      console.error(err);
+    });
+  </script>
+</body>
+</html>
