@@ -67,42 +67,137 @@
   <div id="reader"></div>
   <div id="result">⏳ Đang chờ quét mã...</div>
 
-  <script>
-    const reader = new Html5Qrcode("reader");
+<script>
+  const reader = new Html5Qrcode("reader");
 
-    function detectType(content) {
-      if (content.startsWith("momo://") || content.includes("momo.vn"))
-        return "MoMo";
-      if (content.match(/9704\d{9,}/) || content.includes("vietqr") || content.includes("napas"))
-        return "VietQR / Ngân hàng";
-      if (content.startsWith("http"))
-        return "Liên kết web";
-      if (content.match(/^SP\d+/i))
-        return "Mã sản phẩm nội bộ";
-      return "Không xác định";
+  // Bảng mã ngân hàng phổ biến
+  const bankCodes = {
+    "970416": "Vietcombank",
+    "970418": "Techcombank",
+    "970422": "MB Bank",
+    "970407": "ACB (Asia Commercial Bank)",
+    "970436": "BIDV",
+    "970415": "VietinBank",
+    "970423": "TPBank",
+    "970432": "VPBank",
+    "970405": "Agribank",
+    "970403": "Sacombank",
+    "970409": "Eximbank",
+    "970437": "OCB"
+  };
+
+  // 🔍 Hàm giải mã EMV TLV
+  function parseTLV(data) {
+    let index = 0;
+    const result = {};
+
+    while (index < data.length) {
+      const tag = data.substr(index, 2);
+      const length = parseInt(data.substr(index + 2, 2), 10);
+      const value = data.substr(index + 4, length);
+      result[tag] = value;
+      index += 4 + length;
+    }
+    return result;
+  }
+
+  // 🧠 Phân tích cấu trúc VietQR (theo chuẩn EMV)
+  function parseVietQR(content) {
+    const main = parseTLV(content);
+
+    const bankData = main["38"] ? parseTLV(main["38"]) : {};
+    const subData = bankData["02"] ? parseTLV(bankData["02"]) : {};
+
+    const info = {
+      account: subData["01"] || "Không rõ",
+      bankBin: subData["00"] ? subData["00"].substring(5, 11) : "Không rõ",
+      name: bankData["03"] || main["59"] || "Không rõ",
+      country: main["58"] || "VN",
+      checksum: main["63"] || "Không rõ"
+    };
+
+    info.bank = bankCodes[info.bankBin] || "Không rõ";
+
+    return info;
+  }
+
+  // 🧩 Hàm xác định loại QR & phân tích
+  function analyzeQR(content) {
+    const result = { type: "Không xác định", info: {} };
+
+    // MoMo
+    if (content.includes("momo.vn") || content.startsWith("momo://")) {
+      result.type = "MoMo";
+      result.info.link = content;
+      return result;
     }
 
-    function onScanSuccess(decodedText) {
-      const type = detectType(decodedText);
-      let html = `<div class="type">${type}</div>`;
-      html += `<b>Nội dung quét được:</b><br>${decodedText}<br>`;
-
-      if (decodedText.startsWith("http"))
-        html += `<br><a href="${decodedText}" target="_blank">🔗 Mở liên kết</a>`;
-
-      // Hiển thị kết quả
-      document.getElementById("result").innerHTML = html;
+    // VietQR
+    if (content.match(/A000000727/)) {
+      result.type = "VietQR / Ngân hàng";
+      try {
+        result.info = parseVietQR(content);
+      } catch (e) {
+        console.error(e);
+        result.info = { error: "Không thể giải mã QR VietQR" };
+      }
+      return result;
     }
 
-    reader.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: 250 },
-      onScanSuccess
-    ).catch(err => {
-      document.getElementById("result").innerHTML =
-        "❌ Không thể mở camera.<br>Hãy đảm bảo bạn truy cập qua HTTPS hoặc GitHub Pages.";
-      console.error(err);
-    });
-  </script>
+    // Link hoặc sản phẩm
+    if (content.startsWith("http")) {
+      result.type = "Liên kết web";
+      result.info.link = content;
+      return result;
+    }
+
+    if (content.match(/^SP\d+/i)) {
+      result.type = "Mã sản phẩm nội bộ";
+      result.info.code = content;
+      return result;
+    }
+
+    return result;
+  }
+
+  // 🎯 Hàm hiển thị kết quả quét
+  function onScanSuccess(decodedText) {
+    const data = analyzeQR(decodedText);
+    let html = `<div class="type">${data.type}</div>`;
+
+    if (data.type === "VietQR / Ngân hàng") {
+      const i = data.info;
+      html += `
+        <b>Chủ tài khoản:</b> ${i.name}<br>
+        <b>Số tài khoản:</b> ${i.account}<br>
+        <b>Ngân hàng:</b> ${i.bank}<br>
+        <b>Quốc gia:</b> ${i.country}<br>
+      `;
+    } else if (data.type === "MoMo") {
+      html += `<b>Liên kết MoMo:</b><br><a href="${data.info.link}" target="_blank">${data.info.link}</a>`;
+    } else if (data.type === "Liên kết web") {
+      html += `<b>Liên kết:</b><br><a href="${data.info.link}" target="_blank">${data.info.link}</a>`;
+    } else if (data.type === "Mã sản phẩm nội bộ") {
+      html += `<b>Mã sản phẩm:</b> ${data.info.code}`;
+    } else {
+      html += `<b>Nội dung:</b><br>${decodedText}`;
+    }
+
+    document.getElementById("result").innerHTML = html;
+  }
+
+  // 🚀 Bắt đầu quét
+  reader.start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: 250 },
+    onScanSuccess
+  ).catch(err => {
+    document.getElementById("result").innerHTML =
+      "❌ Không thể mở camera.<br>Hãy đảm bảo bạn truy cập qua HTTPS hoặc GitHub Pages.";
+    console.error(err);
+  });
+</script>
+
+
 </body>
 </html>
