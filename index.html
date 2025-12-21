@@ -3,228 +3,288 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>📷 QR Scanner Nâng Cao</title>
-    <script
-      src="https://unpkg.com/html5-qrcode"
-      type="text/javascript"
-    ></script>
+    <title>🇻🇳 VietQR Scanner Pro</title>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
       :root {
-        --primary: #4caf50;
-        --background: #f8f9fa;
-        --text: #333;
+        --primary: #0056b3;
+        --bg: #f0f2f5;
+        --card-bg: #ffffff;
       }
       body {
-        font-family: "Segoe UI", Arial, sans-serif;
-        background: var(--background);
-        color: var(--text);
-        text-align: center;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
         margin: 0;
         padding: 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
       }
-      h1 {
-        color: var(--primary);
-        font-size: 1.6em;
-      }
+      h1 { color: var(--primary); margin-bottom: 10px; font-size: 1.5rem; }
+      
+      /* Camera Frame */
       #reader {
         width: 100%;
-        max-width: 340px;
-        margin: 20px auto;
-        border-radius: 12px;
+        max-width: 400px;
+        border-radius: 15px;
         overflow: hidden;
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-        background: #fff;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        background: #000;
+        margin-bottom: 20px;
       }
-      #result {
-        margin-top: 20px;
-        padding: 15px;
-        background: white;
-        border-radius: 10px;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-        text-align: left;
-        max-width: 340px;
-        margin-left: auto;
-        margin-right: auto;
-        line-height: 1.5;
+
+      /* Result Card */
+      #result-card {
+        width: 100%;
+        max-width: 400px;
+        background: var(--card-bg);
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        display: none; /* Ẩn khi chưa quét */
+        box-sizing: border-box;
       }
-      .type {
+
+      .info-row {
+        margin-bottom: 12px;
+        border-bottom: 1px dashed #eee;
+        padding-bottom: 8px;
+      }
+      .info-row:last-child { border-bottom: none; }
+      
+      .label {
+        font-size: 0.85rem;
+        color: #666;
+        margin-bottom: 4px;
+        display: block;
+      }
+      .value {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #333;
+        word-break: break-all;
+      }
+      .highlight { color: var(--primary); font-size: 1.2rem; }
+      
+      .btn-copy {
+        background: #eee;
+        border: none;
         padding: 4px 8px;
-        background: var(--primary);
-        color: white;
-        border-radius: 5px;
-        display: inline-block;
-        font-size: 0.85em;
-        margin-bottom: 10px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        cursor: pointer;
+        float: right;
       }
-      a {
-        color: var(--primary);
-        text-decoration: none;
-        font-weight: bold;
+      
+      .status {
+        margin-top: 10px;
+        font-style: italic;
+        color: #666;
       }
     </style>
   </head>
   <body>
-    <h1>📱 Quét mã QR nâng cao</h1>
-    <p>Cho phép truy cập camera và đưa mã QR vào khung bên dưới 👇</p>
-
+    <h1>🇻🇳 Quét VietQR</h1>
+    
     <div id="reader"></div>
-    <div id="result">⏳ Đang chờ quét mã...</div>
+    <div class="status" id="status-text">Đang bật camera...</div>
 
-  <script>
-      const reader = new Html5Qrcode("reader");
+    <div id="result-card">
+      <h3 style="margin-top:0; text-align:center; color: #0056b3;">Thông tin chuyển khoản</h3>
+      
+      <div class="info-row">
+        <span class="label">Ngân hàng:</span>
+        <span class="value" id="res-bank">...</span>
+      </div>
 
-      // Bảng mã ngân hàng phổ biến (Cần cập nhật đầy đủ hơn để nhận diện tốt hơn)
-      const bankCodes = {
-        "970416": "ACB",
+      <div class="info-row">
+        <span class="label">Số tài khoản: <button class="btn-copy" onclick="copyText('res-acc')">Copy</button></span>
+        <span class="value highlight" id="res-acc">...</span>
+      </div>
+
+      <div class="info-row">
+        <span class="label">Chủ tài khoản (Nếu có):</span>
+        <span class="value" id="res-name">...</span>
+      </div>
+
+      <div class="info-row">
+        <span class="label">Số tiền:</span>
+        <span class="value" id="res-amount">0 VND</span>
+      </div>
+
+      <div class="info-row">
+        <span class="label">Nội dung:</span>
+        <span class="value" id="res-content">...</span>
+      </div>
+      
+      <div style="margin-top:15px; text-align:center;">
+        <button onclick="resetScanner()" style="padding:10px 20px; background:var(--primary); color:white; border:none; border-radius:6px; cursor:pointer;">Quét mã khác</button>
+      </div>
+    </div>
+
+    <script>
+      // 🏦 DANH SÁCH MÃ BIN NGÂN HÀNG (Cập nhật đầy đủ)
+      const BANK_BIN = {
+        "970436": "Vietcombank (VCB)",
+        "970415": "VietinBank (CTG)",
         "970418": "BIDV",
-        "970422": "MB Bank",
-        "970407": "Techcombank",
-        "970436": "Vietcombank",
-        "970415": "VietinBank",
-        "970423": "TPBank",
-        "970432": "VPBank",
         "970405": "Agribank",
+        "970448": "OCB",
+        "970422": "MB Bank (Quân Đội)",
+        "970407": "Techcombank (TCB)",
+        "970416": "ACB",
+        "970432": "VPBank",
+        "970423": "TPBank",
         "970403": "Sacombank",
-        "970409": "Bac A Bank",
         "970437": "HDBank",
-        "970454": "VietCapitalBank",
+        "970454": "VietCapital (Bản Việt)",
         "970429": "SCB",
         "970441": "VIB",
         "970443": "SHB",
-        "970448": "OCB",
-        "970452": "KienLongBank",
+        "970409": "Bac A Bank",
+        "970412": "PVcomBank",
+        "970430": "PGBank",
         "970428": "Nam A Bank",
-        // Thêm các ngân hàng khác nếu cần
+        "970414": "OceanBank",
+        "970449": "LienVietPostBank",
+        "970425": "ABBank",
+        "970400": "SaigonBank",
+        "970452": "KienLongBank",
+        "970446": "Co-op Bank",
+        "970458": "United Overseas Bank (UOB)",
+        "970410": "Standard Chartered",
+        "970424": "Shinhan Bank",
+        "970431": "Eximbank",
+        "970438": "BaoViet Bank",
+        "970440": "SeABank",
+        "970427": "VietABank",
+        "970419": "NCB",
+        "970433": "VietBank"
       };
 
-      // 🔍 Hàm giải mã EMV TLV (Tag-Length-Value)
-      function parseTLV(data) {
-        let index = 0;
+      let html5QrcodeScanner = null;
+
+      // 🛠 HÀM GIẢI MÃ TLV (Tag-Length-Value)
+      function parseTLV(str) {
         const result = {};
-        while (index < data.length) {
-          const tag = data.substr(index, 2);
-          const length = parseInt(data.substr(index + 2, 2), 10);
-          const value = data.substr(index + 4, length);
-          result[tag] = value;
-          index += 4 + length;
+        let i = 0;
+        while (i < str.length) {
+          const id = str.substr(i, 2); // 2 ký tự đầu là ID
+          const len = parseInt(str.substr(i + 2, 2)); // 2 ký tự tiếp là độ dài
+          const val = str.substr(i + 4, len); // Giá trị
+          result[id] = val;
+          i += 4 + len;
         }
         return result;
       }
 
-      // 🧠 SỬA LỖI: Phân tích cấu trúc VietQR chuẩn
-      function parseVietQR(content) {
-        // Tầng 1
-        const main = parseTLV(content);
-        
-        // Tầng 2: Lấy Tag 38 (Merchant Information)
-        const tag38Content = main["38"];
-        if (!tag38Content) throw new Error("Không phải VietQR hợp lệ (Thiếu Tag 38)");
-        
-        const tag38Data = parseTLV(tag38Content);
+      // 🧠 TRUNG TÂM XỬ LÝ VIETQR
+      function processVietQR(qrContent) {
+        try {
+          // Bước 1: Phân tích tầng 1
+          const root = parseTLV(qrContent);
 
-        // Tầng 3: Lấy Tag 01 bên trong Tag 38 (Beneficiary Organization)
-        // CODE CŨ CỦA BẠN SAI Ở ĐÂY (Bạn gọi là ["02"])
-        const tag01Content = tag38Data["01"]; 
-        if (!tag01Content) throw new Error("Không tìm thấy thông tin định danh (Thiếu Tag 38->01)");
+          // Kiểm tra xem có phải VietQR không (Dựa vào GUID A000000727 trong Tag 38)
+          // Tag 38 chứa thông tin người thụ hưởng
+          if (!root["38"]) return null;
 
-        const beneficiaryData = parseTLV(tag01Content);
+          // Bước 2: Phân tích tầng 2 (Bên trong Tag 38)
+          const tag38Data = parseTLV(root["38"]);
+          
+          // Kiểm tra GUID NAPAS: Tag 00 phải là A000000727
+          if (tag38Data["00"] !== "A000000727") return null;
 
-        // Lấy thông tin chi tiết
-        const bankBin = beneficiaryData["00"]; // Mã BIN ngân hàng
-        const account = beneficiaryData["01"]; // Số tài khoản
+          // Bước 3: Phân tích tầng 3 (Bên trong Tag 01 của Tag 38)
+          // Đây là nơi chứa BIN và Số tài khoản
+          const serviceData = parseTLV(tag38Data["01"]);
 
-        const info = {
-          account: account || "Không rõ",
-          bankBin: bankBin || "Không rõ",
-          name: main["59"] || "Không rõ", // Tag 59 ở tầng 1 là tên chủ TK
-          country: main["58"] || "VN",
-          desc: main["62"] ? parseTLV(main["62"])["08"] : "", // Nội dung chuyển khoản (Tag 62->08)
-        };
+          const bankBin = serviceData["00"]; // Tag 00: Mã BIN ngân hàng
+          const accountNo = serviceData["01"]; // Tag 01: Số tài khoản
 
-        // Tra cứu tên ngân hàng từ BIN
-        info.bank = bankCodes[info.bankBin] || `Ngân hàng lạ (${info.bankBin})`;
+          // Các thông tin bổ sung ở tầng 1
+          const amount = root["54"] || "0"; // Tag 54: Số tiền (nếu có)
+          const content = root["62"] ? parseTLV(root["62"])["08"] : ""; // Tag 62 -> 08: Nội dung
+          // Lưu ý: Tag 59 (Tên chủ TK) có thể bị ẩn ở QR động, nhưng QR tĩnh thường có
+          const accName = root["59"] || "Không rõ (QR Động)"; 
 
-        return info;
+          return {
+            bankName: BANK_BIN[bankBin] || `Ngân hàng lạ (BIN: ${bankBin})`,
+            accountNo: accountNo,
+            amount: amount,
+            content: content,
+            accName: accName
+          };
+
+        } catch (e) {
+          console.error("Lỗi phân tích:", e);
+          return null;
+        }
       }
 
-      // 🧩 Hàm xác định loại QR & phân tích
-      function analyzeQR(content) {
-        const result = { type: "Không xác định", info: {}, raw: content };
-
-        // 🔸 1️⃣ MoMo QR
-        if (content.includes("momo.vn") || content.startsWith("momo://")) {
-          result.type = "MoMo";
-          // Logic bóc tách MoMo đơn giản
-          // MoMo thường là chuỗi query param dài
-          result.info.link = content;
-          return result;
-        }
-
-        // 🔸 2️⃣ VietQR (chuẩn ngân hàng) - Dấu hiệu nhận biết là A000000727
-        if (content.includes("A000000727")) {
-          result.type = "VietQR / Ngân hàng";
-          try {
-            result.info = parseVietQR(content);
-          } catch (e) {
-            console.error(e);
-            result.type = "VietQR (Lỗi)";
-            result.info = { error: "Không thể giải mã cấu trúc VietQR này." };
-          }
-          return result;
-        }
-
-        // 🔸 3️⃣ Link web
-        if (content.startsWith("http")) {
-          result.type = "Liên kết web";
-          result.info.link = content;
-          return result;
-        }
-
-        return result;
-      }
-
-      // 🎯 Hàm hiển thị kết quả quét
+      // 📷 XỬ LÝ KHI QUÉT THÀNH CÔNG
       function onScanSuccess(decodedText) {
-        // Dừng camera sau khi quét thành công để tránh quét liên tục (tuỳ chọn)
-        // reader.stop(); 
-        
-        const data = analyzeQR(decodedText);
-        let html = `<div class="type">${data.type}</div>`;
+        console.log(`Mã gốc: ${decodedText}`);
 
-        if (data.type === "VietQR / Ngân hàng") {
-          const i = data.info;
-          html += `
-            <div style="text-align:left">
-              <b>🏦 Ngân hàng:</b> ${i.bank}<br>
-              <b>👤 Chủ tài khoản:</b> ${i.name}<br>
-              <b>🔢 Số tài khoản:</b> ${i.account}<br>
-              <b>📝 Nội dung:</b> ${i.desc || "Không có"}<br>
-            </div>
-          `;
-        } 
-        else if (data.type === "MoMo") {
-           html += `<b>MoMo Link:</b><br><a href="${data.raw}">Mở MoMo</a><br><small>${data.raw}</small>`;
-        }
-        else if (data.type === "Liên kết web") {
-          html += `<b>Liên kết:</b><br><a href="${data.info.link}" target="_blank">${data.info.link}</a>`;
-        } 
-        else {
-          html += `<b>Nội dung thô:</b><br>${decodedText}`;
-        }
+        const qrInfo = processVietQR(decodedText);
 
-        document.getElementById("result").innerHTML = html;
+        if (qrInfo) {
+          // Dừng camera
+          if (html5QrcodeScanner) {
+            html5QrcodeScanner.stop().then(() => {
+                document.getElementById("reader").style.display = "none";
+                document.getElementById("status-text").style.display = "none";
+            });
+          }
+
+          // Hiển thị kết quả
+          document.getElementById("result-card").style.display = "block";
+          document.getElementById("res-bank").textContent = qrInfo.bankName;
+          document.getElementById("res-acc").textContent = qrInfo.accountNo;
+          document.getElementById("res-name").textContent = qrInfo.accName;
+          
+          // Format tiền tệ
+          const money = parseInt(qrInfo.amount).toLocaleString('vi-VN');
+          document.getElementById("res-amount").textContent = money !== "0" ? money + " VND" : "Tùy chọn nhập";
+          
+          document.getElementById("res-content").textContent = qrInfo.content || "Không có nội dung";
+        } else {
+           // Nếu không phải VietQR (ví dụ quét link web)
+           alert("Đây không phải mã QR Ngân hàng (VietQR)!\nNội dung: " + decodedText);
+        }
       }
 
-      // 🚀 Bắt đầu quét
-      reader.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: 250 },
-          onScanSuccess
-        )
-        .catch((err) => {
-          document.getElementById("result").innerHTML =
-            "❌ Không thể mở camera.<br>Lỗi: " + err;
+      function onScanFailure(error) {
+        // Không làm gì để tránh spam log
+      }
+
+      // Khởi động Camera
+      function startCamera() {
+        html5QrcodeScanner = new Html5Qrcode("reader");
+        html5QrcodeScanner.start(
+          { facingMode: "environment" }, 
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          onScanSuccess,
+          onScanFailure
+        ).catch(err => {
+            document.getElementById("status-text").innerText = "Lỗi: Không thể mở camera. Hãy cấp quyền hoặc dùng HTTPS.";
         });
+      }
+
+      // Reset để quét lại
+      function resetScanner() {
+        location.reload(); 
+      }
+
+      // Tiện ích copy
+      function copyText(id) {
+        const text = document.getElementById(id).innerText;
+        navigator.clipboard.writeText(text);
+        alert("Đã sao chép: " + text);
+      }
+
+      // Chạy ngay khi load trang
+      startCamera();
+
     </script>
   </body>
 </html>
