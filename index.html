@@ -70,30 +70,37 @@
     <div id="reader"></div>
     <div id="result">⏳ Đang chờ quét mã...</div>
 
-    <script>
+  <script>
       const reader = new Html5Qrcode("reader");
 
-      // Bảng mã ngân hàng phổ biến
+      // Bảng mã ngân hàng phổ biến (Cần cập nhật đầy đủ hơn để nhận diện tốt hơn)
       const bankCodes = {
-        970416: "Vietcombank",
-        970418: "Techcombank",
-        970422: "MB Bank",
-        970407: "ACB (Asia Commercial Bank)",
-        970436: "BIDV",
-        970415: "VietinBank",
-        970423: "TPBank",
-        970432: "VPBank",
-        970405: "Agribank",
-        970403: "Sacombank",
-        970409: "Eximbank",
-        970437: "OCB",
+        "970416": "ACB",
+        "970418": "BIDV",
+        "970422": "MB Bank",
+        "970407": "Techcombank",
+        "970436": "Vietcombank",
+        "970415": "VietinBank",
+        "970423": "TPBank",
+        "970432": "VPBank",
+        "970405": "Agribank",
+        "970403": "Sacombank",
+        "970409": "Bac A Bank",
+        "970437": "HDBank",
+        "970454": "VietCapitalBank",
+        "970429": "SCB",
+        "970441": "VIB",
+        "970443": "SHB",
+        "970448": "OCB",
+        "970452": "KienLongBank",
+        "970428": "Nam A Bank",
+        // Thêm các ngân hàng khác nếu cần
       };
 
-      // 🔍 Hàm giải mã EMV TLV
+      // 🔍 Hàm giải mã EMV TLV (Tag-Length-Value)
       function parseTLV(data) {
         let index = 0;
         const result = {};
-
         while (index < data.length) {
           const tag = data.substr(index, 2);
           const length = parseInt(data.substr(index + 2, 2), 10);
@@ -104,110 +111,72 @@
         return result;
       }
 
-      // 🧠 Phân tích cấu trúc VietQR (theo chuẩn EMV)
+      // 🧠 SỬA LỖI: Phân tích cấu trúc VietQR chuẩn
       function parseVietQR(content) {
+        // Tầng 1
         const main = parseTLV(content);
+        
+        // Tầng 2: Lấy Tag 38 (Merchant Information)
+        const tag38Content = main["38"];
+        if (!tag38Content) throw new Error("Không phải VietQR hợp lệ (Thiếu Tag 38)");
+        
+        const tag38Data = parseTLV(tag38Content);
 
-        const bankData = main["38"] ? parseTLV(main["38"]) : {};
-        const subData = bankData["02"] ? parseTLV(bankData["02"]) : {};
+        // Tầng 3: Lấy Tag 01 bên trong Tag 38 (Beneficiary Organization)
+        // CODE CŨ CỦA BẠN SAI Ở ĐÂY (Bạn gọi là ["02"])
+        const tag01Content = tag38Data["01"]; 
+        if (!tag01Content) throw new Error("Không tìm thấy thông tin định danh (Thiếu Tag 38->01)");
+
+        const beneficiaryData = parseTLV(tag01Content);
+
+        // Lấy thông tin chi tiết
+        const bankBin = beneficiaryData["00"]; // Mã BIN ngân hàng
+        const account = beneficiaryData["01"]; // Số tài khoản
 
         const info = {
-          account: subData["01"] || "Không rõ",
-          bankBin: subData["00"] ? subData["00"].substring(5, 11) : "Không rõ",
-          name: bankData["03"] || main["59"] || "Không rõ",
+          account: account || "Không rõ",
+          bankBin: bankBin || "Không rõ",
+          name: main["59"] || "Không rõ", // Tag 59 ở tầng 1 là tên chủ TK
           country: main["58"] || "VN",
-          checksum: main["63"] || "Không rõ",
+          desc: main["62"] ? parseTLV(main["62"])["08"] : "", // Nội dung chuyển khoản (Tag 62->08)
         };
 
-        info.bank = bankCodes[info.bankBin] || "Không rõ";
+        // Tra cứu tên ngân hàng từ BIN
+        info.bank = bankCodes[info.bankBin] || `Ngân hàng lạ (${info.bankBin})`;
 
         return info;
       }
 
       // 🧩 Hàm xác định loại QR & phân tích
-      function analyzeQR(content) {function analyzeQR(content) {
-  const result = { type: "Không xác định", info: {} };
+      function analyzeQR(content) {
+        const result = { type: "Không xác định", info: {}, raw: content };
 
-  // 🔸 1️⃣ MoMo QR
-  if (content.includes("momo.vn") || content.startsWith("momo://")) {
-    result.type = "MoMo";
-    try {
-      const url = new URL(content.replace("momo://", "https://"));
-      const params = Object.fromEntries(url.searchParams.entries());
-
-      result.info = {
-        merchant: params.merchantname || "Không rõ",
-        amount: params.amount || "Không có",
-        comment: params.comment || "",
-        partnerCode: params.partnerCode || "",
-        action: params.action || "",
-        raw: content
-      };
-    } catch (e) {
-      result.info.raw = content;
-    }
-    return result;
-  }
-
-  // 🔸 2️⃣ VietQR (chuẩn ngân hàng)
-  if (content.match(/A000000727/)) {
-    result.type = "VietQR / Ngân hàng";
-    try {
-      result.info = parseVietQR(content);
-    } catch (e) {
-      result.info = { error: "Không thể giải mã QR VietQR" };
-    }
-    return result;
-  }
-
-  // 🔸 3️⃣ Link web
-  if (content.startsWith("http")) {
-    result.type = "Liên kết web";
-    result.info.link = content;
-    return result;
-  }
-
-  // 🔸 4️⃣ Mã sản phẩm nội bộ
-  if (content.match(/^SP\d+/i)) {
-    result.type = "Mã sản phẩm nội bộ";
-    result.info.code = content;
-    return result;
-  }
-
-  return result;
-}
-
-        const result = { type: "Không xác định", info: {} };
-
-        // MoMo
+        // 🔸 1️⃣ MoMo QR
         if (content.includes("momo.vn") || content.startsWith("momo://")) {
           result.type = "MoMo";
+          // Logic bóc tách MoMo đơn giản
+          // MoMo thường là chuỗi query param dài
           result.info.link = content;
           return result;
         }
 
-        // VietQR
-        if (content.match(/A000000727/)) {
+        // 🔸 2️⃣ VietQR (chuẩn ngân hàng) - Dấu hiệu nhận biết là A000000727
+        if (content.includes("A000000727")) {
           result.type = "VietQR / Ngân hàng";
           try {
             result.info = parseVietQR(content);
           } catch (e) {
             console.error(e);
-            result.info = { error: "Không thể giải mã QR VietQR" };
+            result.type = "VietQR (Lỗi)";
+            result.info = { error: "Không thể giải mã cấu trúc VietQR này." };
           }
           return result;
         }
 
-        // Link hoặc sản phẩm
+        // 🔸 3️⃣ Link web
         if (content.startsWith("http")) {
           result.type = "Liên kết web";
           result.info.link = content;
-          return result;
-        }
-
-        if (content.match(/^SP\d+/i)) {
-          result.type = "Mã sản phẩm nội bộ";
-          result.info.code = content;
           return result;
         }
 
@@ -215,77 +184,46 @@
       }
 
       // 🎯 Hàm hiển thị kết quả quét
-      function onScanSuccess(decodedText) {function onScanSuccess(decodedText) {
-  const data = analyzeQR(decodedText);
-  let html = `<div class="type">${data.type}</div>`;
-
-  if (data.type === "VietQR / Ngân hàng") {
-    const i = data.info;
-    html += `
-      <b>Chủ tài khoản:</b> ${i.name}<br>
-      <b>Số tài khoản:</b> ${i.account}<br>
-      <b>Ngân hàng:</b> ${i.bank}<br>
-      <b>Quốc gia:</b> ${i.country}<br>
-    `;
-  } 
-  else if (data.type === "MoMo") {
-    const i = data.info;
-    html += `
-      <b>Tên người nhận / Đơn vị:</b> ${i.merchant}<br>
-      <b>Số tiền:</b> ${i.amount} ₫<br>
-      <b>Nội dung:</b> ${i.comment}<br>
-      <b>Partner Code:</b> ${i.partnerCode}<br>
-      <small><i>${i.raw}</i></small>
-    `;
-  } 
-  else if (data.type === "Liên kết web") {
-    html += `<b>Liên kết:</b><br><a href="${data.info.link}" target="_blank">${data.info.link}</a>`;
-  } 
-  else if (data.type === "Mã sản phẩm nội bộ") {
-    html += `<b>Mã sản phẩm:</b> ${data.info.code}`;
-  } 
-  else {
-    html += `<b>Nội dung:</b><br>${decodedText}`;
-  }
-
-  document.getElementById("result").innerHTML = html;
-}
-
+      function onScanSuccess(decodedText) {
+        // Dừng camera sau khi quét thành công để tránh quét liên tục (tuỳ chọn)
+        // reader.stop(); 
+        
         const data = analyzeQR(decodedText);
         let html = `<div class="type">${data.type}</div>`;
 
         if (data.type === "VietQR / Ngân hàng") {
           const i = data.info;
           html += `
-        <b>Chủ tài khoản:</b> ${i.name}<br>
-        <b>Số tài khoản:</b> ${i.account}<br>
-        <b>Ngân hàng:</b> ${i.bank}<br>
-        <b>Quốc gia:</b> ${i.country}<br>
-      `;
-        } else if (data.type === "MoMo") {
-          html += `<b>Liên kết MoMo:</b><br><a href="${data.info.link}" target="_blank">${data.info.link}</a>`;
-        } else if (data.type === "Liên kết web") {
+            <div style="text-align:left">
+              <b>🏦 Ngân hàng:</b> ${i.bank}<br>
+              <b>👤 Chủ tài khoản:</b> ${i.name}<br>
+              <b>🔢 Số tài khoản:</b> ${i.account}<br>
+              <b>📝 Nội dung:</b> ${i.desc || "Không có"}<br>
+            </div>
+          `;
+        } 
+        else if (data.type === "MoMo") {
+           html += `<b>MoMo Link:</b><br><a href="${data.raw}">Mở MoMo</a><br><small>${data.raw}</small>`;
+        }
+        else if (data.type === "Liên kết web") {
           html += `<b>Liên kết:</b><br><a href="${data.info.link}" target="_blank">${data.info.link}</a>`;
-        } else if (data.type === "Mã sản phẩm nội bộ") {
-          html += `<b>Mã sản phẩm:</b> ${data.info.code}`;
-        } else {
-          html += `<b>Nội dung:</b><br>${decodedText}`;
+        } 
+        else {
+          html += `<b>Nội dung thô:</b><br>${decodedText}`;
         }
 
         document.getElementById("result").innerHTML = html;
       }
 
       // 🚀 Bắt đầu quét
-      reader
-        .start(
+      reader.start(
           { facingMode: "environment" },
           { fps: 10, qrbox: 250 },
           onScanSuccess
         )
         .catch((err) => {
           document.getElementById("result").innerHTML =
-            "❌ Không thể mở camera.<br>Hãy đảm bảo bạn truy cập qua HTTPS hoặc GitHub Pages.";
-          console.error(err);
+            "❌ Không thể mở camera.<br>Lỗi: " + err;
         });
     </script>
   </body>
