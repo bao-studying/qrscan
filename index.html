@@ -3,11 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>🇻🇳 VietQR Scanner Pro</title>
+    <title>🇻🇳 VietQR Pro Payment</title>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
       :root {
         --primary: #0056b3;
+        --success: #28a745;
         --bg: #f0f2f5;
         --card-bg: #ffffff;
       }
@@ -19,6 +20,7 @@
         display: flex;
         flex-direction: column;
         align-items: center;
+        min-height: 100vh;
       }
       h1 { color: var(--primary); margin-bottom: 10px; font-size: 1.5rem; }
       
@@ -31,202 +33,346 @@
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         background: #000;
         margin-bottom: 20px;
+        display: none; /* Ẩn mặc định chờ nhập tên */
       }
 
-      /* Result Card */
-      #result-card {
+      /* Container chung cho các Card */
+      .card {
         width: 100%;
         max-width: 400px;
         background: var(--card-bg);
         border-radius: 12px;
         padding: 20px;
         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        display: none; /* Ẩn khi chưa quét */
+        box-sizing: border-box;
+        margin-bottom: 20px;
+      }
+
+      /* 1. Modal Nhập tên ban đầu */
+      #setup-modal {
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+      }
+      .modal-content {
+        background: white;
+        padding: 25px;
+        border-radius: 12px;
+        width: 85%;
+        max-width: 350px;
+        text-align: center;
+      }
+      .custom-input {
+        width: 100%;
+        padding: 12px;
+        margin: 10px 0;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        font-size: 1rem;
         box-sizing: border-box;
       }
 
-      .info-row {
-        margin-bottom: 12px;
-        border-bottom: 1px dashed #eee;
-        padding-bottom: 8px;
-      }
-      .info-row:last-child { border-bottom: none; }
+      /* 2. Form Chuyển khoản (3 Blocks) */
+      #result-card { display: none; }
       
-      .label {
-        font-size: 0.85rem;
-        color: #666;
-        margin-bottom: 4px;
-        display: block;
+      .block {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+        border: 1px solid #eee;
       }
-      .value {
+      .block-title {
+        font-size: 0.8rem;
+        color: #666;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        font-weight: bold;
+      }
+      .info-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 5px;
+        font-size: 0.95rem;
+      }
+      .info-val { font-weight: 600; color: #333; text-align: right; word-break: break-all;}
+      .highlight { color: var(--primary); }
+
+      .money-input {
+        width: 100%;
+        border: none;
+        background: transparent;
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: var(--primary);
+        border-bottom: 2px solid #ddd;
+        padding: 5px 0;
+        outline: none;
+      }
+      .money-input:focus { border-bottom-color: var(--primary); }
+
+      .content-input {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-family: inherit;
+        box-sizing: border-box;
+      }
+
+      .btn-primary {
+        width: 100%;
+        padding: 14px;
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: 8px;
         font-size: 1.1rem;
         font-weight: 600;
-        color: #333;
-        word-break: break-all;
-      }
-      .highlight { color: var(--primary); font-size: 1.2rem; }
-      
-      .btn-copy {
-        background: #eee;
-        border: none;
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-size: 0.8rem;
         cursor: pointer;
-        float: right;
+        transition: background 0.2s;
       }
+      .btn-primary:active { background: #004494; }
+
+      /* 3. Ticket Thành công */
+      #ticket-card {
+        display: none;
+        background: #fff;
+        border-top: 5px solid var(--success);
+        position: relative;
+      }
+      #ticket-card::before {
+        content: "";
+        position: absolute;
+        top: -5px; left: 0; right: 0; height: 5px; background: var(--success);
+      }
+      .success-icon {
+        color: var(--success);
+        font-size: 3rem;
+        text-align: center;
+        margin-bottom: 10px;
+      }
+      .ticket-amount {
+        text-align: center;
+        font-size: 1.8rem;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 20px;
+      }
+      .dashed-line {
+        border-bottom: 2px dashed #eee;
+        margin: 15px 0;
+      }
+
+      /* Loading Overlay */
+      #loading-overlay {
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(255,255,255,0.9);
+        display: none;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 2000;
+      }
+      .spinner {
+        width: 50px; height: 50px;
+        border: 5px solid #f3f3f3;
+        border-top: 5px solid var(--primary);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-bottom: 15px;
+      }
+      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
       
-      .status {
-        margin-top: 10px;
-        font-style: italic;
-        color: #666;
-      }
+      .status { margin-top: 10px; font-style: italic; color: #666; text-align: center;}
     </style>
   </head>
   <body>
-    <h1>🇻🇳 Quét VietQR</h1>
+    <h1>🇻🇳 VietQR Pay</h1>
     
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <div id="loading-text" style="font-weight:600; color:#555;">Đang xử lý...</div>
+    </div>
+
+    <div id="setup-modal">
+        <div class="modal-content">
+            <h3 style="margin-top:0; color:var(--primary)">Thiết lập</h3>
+            <p style="font-size:0.9rem; color:#666; margin-bottom:5px;">Vui lòng nhập tên của bạn (Người chuyển):</p>
+            <input type="text" id="sender-name-input" class="custom-input" placeholder="Ví dụ: NGUYEN VAN A" autocomplete="off">
+            <button class="btn-primary" onclick="confirmSetup()">Bắt đầu quét</button>
+        </div>
+    </div>
+
     <div id="reader"></div>
-    <div class="status" id="status-text">Đang bật camera...</div>
+    <div class="status" id="status-text" style="display:none;">Đang bật camera...</div>
 
-    <div id="result-card">
-      <h3 style="margin-top:0; text-align:center; color: #0056b3;">Thông tin chuyển khoản</h3>
+    <div id="result-card" class="card">
+      <h3 style="margin-top:0; text-align:center; color: var(--primary); margin-bottom: 20px;">Thông tin chuyển khoản</h3>
       
-      <div class="info-row">
-        <span class="label">Ngân hàng:</span>
-        <span class="value" id="res-bank">...</span>
+      <div class="block">
+          <div class="block-title">Tài khoản thụ hưởng</div>
+          <div class="info-row">
+              <span>Ngân hàng:</span>
+              <span class="info-val" id="res-bank">...</span>
+          </div>
+          <div class="info-row">
+              <span>Số tài khoản:</span>
+              <span class="info-val highlight" id="res-acc">...</span>
+          </div>
+          <div class="info-row">
+              <span>Chủ tài khoản:</span>
+              <span class="info-val" id="res-name">...</span>
+          </div>
       </div>
 
-      <div class="info-row">
-        <span class="label">Số tài khoản: <button class="btn-copy" onclick="copyText('res-acc')">Copy</button></span>
-        <span class="value highlight" id="res-acc">...</span>
+      <div class="block">
+          <div class="block-title">Số tiền giao dịch</div>
+          <input type="number" id="input-amount" class="money-input" placeholder="0" oninput="formatMoneyDisplay()">
+          <div style="text-align:right; font-size:0.8rem; color:#999; margin-top:5px;" id="money-text">0 VND</div>
       </div>
 
-      <div class="info-row">
-        <span class="label">Chủ tài khoản (Nếu có):</span>
-        <span class="value" id="res-name">...</span>
-      </div>
-
-      <div class="info-row">
-        <span class="label">Số tiền:</span>
-        <span class="value" id="res-amount">0 VND</span>
-      </div>
-
-      <div class="info-row">
-        <span class="label">Nội dung:</span>
-        <span class="value" id="res-content">...</span>
+      <div class="block">
+          <div class="block-title">Nội dung chuyển tiền</div>
+          <textarea id="input-content" class="content-input" rows="3" placeholder="Nhập nội dung..."></textarea>
       </div>
       
-      <div style="margin-top:15px; text-align:center;">
-        <button onclick="resetScanner()" style="padding:10px 20px; background:var(--primary); color:white; border:none; border-radius:6px; cursor:pointer;">Quét mã khác</button>
+      <button class="btn-primary" onclick="handleTransfer()">Chuyển khoản ngay</button>
+      <div style="text-align:center; margin-top:15px;">
+        <a href="#" onclick="resetScanner()" style="color:#666; font-size:0.9rem; text-decoration:none;">Hủy & Quét lại</a>
       </div>
     </div>
 
+    <div id="ticket-card" class="card">
+        <div class="success-icon">✓</div>
+        <div style="text-align:center; font-weight:bold; color:var(--success); margin-bottom:5px;">GIAO DỊCH THÀNH CÔNG</div>
+        <div style="text-align:center; color:#999; font-size:0.85rem; margin-bottom:15px;" id="ticket-time">...</div>
+        
+        <div class="ticket-amount" id="ticket-amount">0 VND</div>
+        
+        <div class="dashed-line"></div>
+        
+        <div class="info-row">
+            <span style="color:#666">Người chuyển:</span>
+            <span class="info-val" id="ticket-sender">...</span>
+        </div>
+        <div class="dashed-line"></div>
+        
+        <div class="info-row">
+            <span style="color:#666">Người nhận:</span>
+            <span class="info-val" id="ticket-receiver">...</span>
+        </div>
+        <div class="info-row">
+            <span style="color:#666">Ngân hàng:</span>
+            <span class="info-val" id="ticket-bank">...</span>
+        </div>
+        <div class="info-row">
+            <span style="color:#666">Số tài khoản:</span>
+            <span class="info-val" id="ticket-acc">...</span>
+        </div>
+        
+        <div class="dashed-line"></div>
+        
+        <div style="font-size:0.85rem; color:#666; margin-bottom:5px;">Nội dung:</div>
+        <div style="background:#f5f5f5; padding:10px; border-radius:6px; color:#333;" id="ticket-content">...</div>
+
+        <button class="btn-primary" style="margin-top:25px; background:#6c757d;" onclick="resetScanner()">Thực hiện giao dịch mới</button>
+    </div>
+
     <script>
-      // 🏦 DANH SÁCH MÃ BIN NGÂN HÀNG (Cập nhật đầy đủ)
+      // 🏦 DANH SÁCH MÃ BIN NGÂN HÀNG (GIỮ NGUYÊN)
       const BANK_BIN = {
-        "970436": "Vietcombank (VCB)",
-        "970415": "VietinBank (CTG)",
-        "970418": "BIDV",
-        "970405": "Agribank",
-        "970448": "OCB",
-        "970422": "MB Bank (Quân Đội)",
-        "970407": "Techcombank (TCB)",
-        "970416": "ACB",
-        "970432": "VPBank",
-        "970423": "TPBank",
-        "970403": "Sacombank",
-        "970437": "HDBank",
-        "970454": "VietCapital (Bản Việt)",
-        "970429": "SCB",
-        "970441": "VIB",
-        "970443": "SHB",
-        "970409": "Bac A Bank",
-        "970412": "PVcomBank",
-        "970430": "PGBank",
-        "970428": "Nam A Bank",
-        "970414": "OceanBank",
-        "970449": "LienVietPostBank",
-        "970425": "ABBank",
-        "970400": "SaigonBank",
-        "970452": "KienLongBank",
-        "970446": "Co-op Bank",
-        "970458": "United Overseas Bank (UOB)",
-        "970410": "Standard Chartered",
-        "970424": "Shinhan Bank",
-        "970431": "Eximbank",
-        "970438": "BaoViet Bank",
-        "970440": "SeABank",
-        "970427": "VietABank",
-        "970419": "NCB",
-        "970433": "VietBank"
+        "970436": "Vietcombank (VCB)", "970415": "VietinBank (CTG)", "970418": "BIDV", "970405": "Agribank",
+        "970448": "OCB", "970422": "MB Bank (Quân Đội)", "970407": "Techcombank (TCB)", "970416": "ACB",
+        "970432": "VPBank", "970423": "TPBank", "970403": "Sacombank", "970437": "HDBank",
+        "970454": "VietCapital (Bản Việt)", "970429": "SCB", "970441": "VIB", "970443": "SHB",
+        "970409": "Bac A Bank", "970412": "PVcomBank", "970430": "PGBank", "970428": "Nam A Bank",
+        "970414": "OceanBank", "970449": "LienVietPostBank", "970425": "ABBank", "970400": "SaigonBank",
+        "970452": "KienLongBank", "970446": "Co-op Bank", "970458": "United Overseas Bank (UOB)",
+        "970410": "Standard Chartered", "970424": "Shinhan Bank", "970431": "Eximbank", "970438": "BaoViet Bank",
+        "970440": "SeABank", "970427": "VietABank", "970419": "NCB", "970433": "VietBank",
+        "970457": "Woori Bank", "970468": "SeABank"
       };
 
       let html5QrcodeScanner = null;
+      let senderName = "Bạn"; // Tên mặc định
 
-      // 🛠 HÀM GIẢI MÃ TLV (Tag-Length-Value)
+      // 🛠 HÀM GIẢI MÃ TLV (Tag-Length-Value) - GIỮ NGUYÊN
       function parseTLV(str) {
         const result = {};
         let i = 0;
         while (i < str.length) {
-          const id = str.substr(i, 2); // 2 ký tự đầu là ID
-          const len = parseInt(str.substr(i + 2, 2)); // 2 ký tự tiếp là độ dài
-          const val = str.substr(i + 4, len); // Giá trị
+          const id = str.substr(i, 2);
+          const len = parseInt(str.substr(i + 2, 2));
+          const val = str.substr(i + 4, len);
           result[id] = val;
           i += 4 + len;
         }
         return result;
       }
 
-      // 🧠 TRUNG TÂM XỬ LÝ VIETQR
+      // 🧠 TRUNG TÂM XỬ LÝ VIETQR - GIỮ NGUYÊN
       function processVietQR(qrContent) {
         try {
-          // Bước 1: Phân tích tầng 1
           const root = parseTLV(qrContent);
-
-          // Kiểm tra xem có phải VietQR không (Dựa vào GUID A000000727 trong Tag 38)
-          // Tag 38 chứa thông tin người thụ hưởng
           if (!root["38"]) return null;
-
-          // Bước 2: Phân tích tầng 2 (Bên trong Tag 38)
           const tag38Data = parseTLV(root["38"]);
-          
-          // Kiểm tra GUID NAPAS: Tag 00 phải là A000000727
           if (tag38Data["00"] !== "A000000727") return null;
-
-          // Bước 3: Phân tích tầng 3 (Bên trong Tag 01 của Tag 38)
-          // Đây là nơi chứa BIN và Số tài khoản
           const serviceData = parseTLV(tag38Data["01"]);
-
-          const bankBin = serviceData["00"]; // Tag 00: Mã BIN ngân hàng
-          const accountNo = serviceData["01"]; // Tag 01: Số tài khoản
-
-          // Các thông tin bổ sung ở tầng 1
-          const amount = root["54"] || "0"; // Tag 54: Số tiền (nếu có)
-          const content = root["62"] ? parseTLV(root["62"])["08"] : ""; // Tag 62 -> 08: Nội dung
-          // Lưu ý: Tag 59 (Tên chủ TK) có thể bị ẩn ở QR động, nhưng QR tĩnh thường có
-          const accName = root["59"] || "Không rõ (QR Động)"; 
+          const bankBin = serviceData["00"]; 
+          const accountNo = serviceData["01"]; 
+          const amount = root["54"] || "";
+          const content = root["62"] ? parseTLV(root["62"])["08"] : ""; 
+          const accName = root["59"] || "Không xác định"; 
 
           return {
-            bankName: BANK_BIN[bankBin] || `Ngân hàng lạ (BIN: ${bankBin})`,
+            bankName: BANK_BIN[bankBin] || `Ngân hàng lạ (${bankBin})`,
             accountNo: accountNo,
             amount: amount,
             content: content,
             accName: accName
           };
-
         } catch (e) {
           console.error("Lỗi phân tích:", e);
           return null;
         }
       }
 
-      // 📷 XỬ LÝ KHI QUÉT THÀNH CÔNG
+      // --- LOGIC MỚI BẮT ĐẦU TỪ ĐÂY ---
+
+      // 1. Xác nhận tên người chuyển, ẩn modal, bật camera
+      function confirmSetup() {
+        const inputName = document.getElementById("sender-name-input").value;
+        if(inputName.trim() !== "") {
+            senderName = inputName.toUpperCase();
+        }
+        document.getElementById("setup-modal").style.display = "none";
+        document.getElementById("reader").style.display = "block";
+        document.getElementById("status-text").style.display = "block";
+        startCamera();
+      }
+
+      // 2. Hiệu ứng Loading
+      function showLoading(text, duration, callback) {
+          const overlay = document.getElementById("loading-overlay");
+          const txt = document.getElementById("loading-text");
+          txt.innerText = text;
+          overlay.style.display = "flex";
+          
+          setTimeout(() => {
+              overlay.style.display = "none";
+              if(callback) callback();
+          }, duration);
+      }
+
+      // 3. Xử lý khi quét thành công
       function onScanSuccess(decodedText) {
-        console.log(`Mã gốc: ${decodedText}`);
-
         const qrInfo = processVietQR(decodedText);
-
         if (qrInfo) {
           // Dừng camera
           if (html5QrcodeScanner) {
@@ -236,28 +382,77 @@
             });
           }
 
-          // Hiển thị kết quả
-          document.getElementById("result-card").style.display = "block";
-          document.getElementById("res-bank").textContent = qrInfo.bankName;
-          document.getElementById("res-acc").textContent = qrInfo.accountNo;
-          document.getElementById("res-name").textContent = qrInfo.accName;
-          
-          // Format tiền tệ
-          const money = parseInt(qrInfo.amount).toLocaleString('vi-VN');
-          document.getElementById("res-amount").textContent = money !== "0" ? money + " VND" : "Tùy chọn nhập";
-          
-          document.getElementById("res-content").textContent = qrInfo.content || "Không có nội dung";
+          // Loading ảo 2 giây -> Hiện form
+          showLoading("Đang truy xuất thông tin...", 2000, () => {
+              // Điền dữ liệu vào Form (Result Card)
+              document.getElementById("res-bank").textContent = qrInfo.bankName;
+              document.getElementById("res-acc").textContent = qrInfo.accountNo;
+              document.getElementById("res-name").textContent = qrInfo.accName;
+              
+              // Điền tiền và nội dung nếu có trong QR
+              const amountInput = document.getElementById("input-amount");
+              amountInput.value = qrInfo.amount;
+              formatMoneyDisplay(); // Update text hiển thị
+
+              const contentInput = document.getElementById("input-content");
+              contentInput.value = qrInfo.content;
+
+              // Hiện Form
+              document.getElementById("result-card").style.display = "block";
+          });
+
         } else {
-           // Nếu không phải VietQR (ví dụ quét link web)
-           alert("Đây không phải mã QR Ngân hàng (VietQR)!\nNội dung: " + decodedText);
+           alert("Mã QR không hợp lệ hoặc không phải VietQR!");
         }
       }
 
-      function onScanFailure(error) {
-        // Không làm gì để tránh spam log
+      // 4. Xử lý sự kiện "Chuyển khoản"
+      function handleTransfer() {
+        // Lấy dữ liệu từ form
+        const amount = document.getElementById("input-amount").value;
+        const content = document.getElementById("input-content").value;
+        
+        if (!amount || parseInt(amount) <= 0) {
+            alert("Vui lòng nhập số tiền hợp lệ!");
+            return;
+        }
+
+        // Loading ảo 2 giây -> Hiện Ticket
+        showLoading("Đang thực hiện giao dịch...", 2000, () => {
+            // Ẩn form
+            document.getElementById("result-card").style.display = "none";
+            
+            // Điền thông tin vào Ticket
+            const now = new Date();
+            document.getElementById("ticket-time").innerText = now.toLocaleString('vi-VN');
+            document.getElementById("ticket-amount").innerText = parseInt(amount).toLocaleString('vi-VN') + " VND";
+            
+            document.getElementById("ticket-sender").innerText = senderName;
+            document.getElementById("ticket-receiver").innerText = document.getElementById("res-name").innerText;
+            document.getElementById("ticket-bank").innerText = document.getElementById("res-bank").innerText;
+            document.getElementById("ticket-acc").innerText = document.getElementById("res-acc").innerText;
+            document.getElementById("ticket-content").innerText = content || "Không có nội dung";
+
+            // Hiện Ticket
+            document.getElementById("ticket-card").style.display = "block";
+        });
       }
 
-      // Khởi động Camera
+      // Format hiển thị tiền tệ bên dưới input
+      function formatMoneyDisplay() {
+          const val = document.getElementById("input-amount").value;
+          const display = document.getElementById("money-text");
+          if(val) {
+              display.innerText = parseInt(val).toLocaleString('vi-VN') + " VND";
+          } else {
+              display.innerText = "0 VND";
+          }
+      }
+
+      function onScanFailure(error) {
+        // Ignored
+      }
+
       function startCamera() {
         html5QrcodeScanner = new Html5Qrcode("reader");
         html5QrcodeScanner.start(
@@ -266,24 +461,13 @@
           onScanSuccess,
           onScanFailure
         ).catch(err => {
-            document.getElementById("status-text").innerText = "Lỗi: Không thể mở camera. Hãy cấp quyền hoặc dùng HTTPS.";
+            document.getElementById("status-text").innerText = "Lỗi Camera: " + err;
         });
       }
 
-      // Reset để quét lại
       function resetScanner() {
         location.reload(); 
       }
-
-      // Tiện ích copy
-      function copyText(id) {
-        const text = document.getElementById(id).innerText;
-        navigator.clipboard.writeText(text);
-        alert("Đã sao chép: " + text);
-      }
-
-      // Chạy ngay khi load trang
-      startCamera();
 
     </script>
   </body>
